@@ -1,0 +1,65 @@
+# 1. Load and Prepare Data
+# Replace 'cyber_crime_2020.csv' with your actual file path
+df <- read.csv("cyber_crime_2020_1a1ee499-5095-4d7b-a2d4-412a108259da.csv")
+# Extract state names and numeric data
+states <- df[, 1]
+data_numeric <- df[, 2:ncol(df)]
+
+# Scale the data (Mean = 0, Var = 1) - Critical for PCA and Clustering
+data_scaled <- scale(data_numeric)
+rownames(data_scaled) <- states
+
+# --- (a) PCA Projection ---
+pca_res <- prcomp(data_scaled)
+# Extract coordinates for PC1 and PC2
+pc_scores <- as.data.frame(pca_res$x)
+
+plot(pc_scores$PC1, pc_scores$PC2, pch = 19, col = "blue",
+     xlab = "PC1", ylab = "PC2", main = "PCA Projection of Cyber Crimes")
+text(pc_scores$PC1, pc_scores$PC2, labels = states, pos = 3, cex = 0.7)
+grid()
+
+# --- (b) Detect Outliers ---
+# Using Mahalanobis Distance in PCA space (top 2 components)
+mu <- colMeans(pc_scores[,1:2])
+sigma <- cov(pc_scores[,1:2])
+md <- mahalanobis(pc_scores[,1:2], mu, sigma)
+outliers <- states[md > qchisq(0.95, df=2)] # 95% confidence threshold
+cat("Potential Outliers (95% Threshold):", as.character(outliers), "\n")
+
+# --- (c) Scree Plot ---
+# Calculate Explained Variance
+std_dev <- pca_res$sdev
+pr_var <- std_dev^2
+prop_varex <- pr_var / sum(pr_var)
+
+plot(prop_varex, type = "b", xlab = "Principal Component", 
+     ylab = "Proportion of Variance Explained", main = "Scree Plot")
+# Cumulative Variance Plot
+plot(cumsum(prop_varex), type = "b", xlab = "Number of Components", 
+     ylab = "Cumulative Proportion of Variance Explained", main = "Cumulative Scree Plot")
+abline(h = 0.9, col = "red", lty = 2) # 90% threshold line
+
+# --- (d) Hierarchical Clustering (Complete Linkage) ---
+dist_mat <- dist(data_scaled, method = 'euclidean')
+hc_complete <- hclust(dist_mat, method = 'complete')
+
+# Plot Dendrogram
+plot(hc_complete, main = "Complete Linkage Dendrogram", xlab = "States/UTs", sub = "")
+rect.hclust(hc_complete, k = 4, border = "red") # Visualize 4 clusters
+
+# Partition into 4 clusters
+hc_clusters <- cutree(hc_complete, k = 4)
+cat("\n--- Hierarchical Clusters (k=4) ---\n")
+for(i in 1:4) {
+  cat(paste("Cluster", i, ":", paste(states[hc_clusters == i], collapse = ", "), "\n\n"))
+}
+
+# --- (e) K-means Clustering (k=4) ---
+set.seed(42) # For reproducibility
+km_res <- kmeans(data_scaled, centers = 4, nstart = 25)
+
+cat("\n--- K-means Clusters (k=4) ---\n")
+for(i in 1:4) {
+  cat(paste("Cluster", i, ":", paste(states[km_res$cluster == i], collapse = ", "), "\n\n"))
+}
